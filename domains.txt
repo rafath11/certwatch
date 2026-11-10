@@ -1,0 +1,4 @@
+# One domain per line. Replace these with your own fleet.
+example.com
+github.com
+google.com
