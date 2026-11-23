@@ -10,12 +10,13 @@ Usage:
     python3 certwatch.py example.com github.com
     python3 certwatch.py --file domains.txt --warn-days 45
     python3 certwatch.py --file domains.txt --json
+    python3 certwatch.py --file domains.txt --quiet
     python3 certwatch.py example.com --fail-on warn     # exit 1 if anything is inside the warn window
     python3 certwatch.py example.com --fail-on expired  # exit 1 only if something is already expired
 
 Exit codes: 0 = everything outside the warn window (or failures tolerated by --fail-on),
-            1 = at least one domain at the --fail-on level,
-            2 = at least one domain could not be checked at all.
+        1 = at least one domain at the --fail-on level,
+        2 = at least one domain could not be checked at all.
 """
 
 import argparse
@@ -81,22 +82,22 @@ def check_domain(domain, port=DEFAULT_PORT, timeout=DEFAULT_TIMEOUT):
         with _open_tcp(host, port, timeout) as sock:
             with ctx.wrap_socket(sock, server_hostname=host) as tls:
                 cert = tls.getpeercert()
-        not_after = cert.get("notAfter")
-        expires = ssl.cert_time_to_seconds(not_after)
-        expires_dt = datetime.fromtimestamp(expires, tz=timezone.utc)
-        days_left = (expires_dt - datetime.now(timezone.utc)).days
-        issuer = dict(x[0] for x in cert.get("issuer", ()))
-        result.update(
-            {
-                "status": "ok",
-                "expires": expires_dt.strftime("%Y-%m-%d"),
-                "days_left": days_left,
-                "issuer": issuer.get("organizationName", "unknown"),
-            }
-        )
-    except Exception as exc:  # DNS failure, refused connection, bad cert, timeout...
-        result.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
-    return result
+                not_after = cert.get("notAfter")
+                expires = ssl.cert_time_to_seconds(not_after)
+                expires_dt = datetime.fromtimestamp(expires, tz=timezone.utc)
+                days_left = (expires_dt - datetime.now(timezone.utc)).days
+                issuer = dict(x[0] for x in cert.get("issuer", ()))
+                result.update(
+                    {
+                        "status": "ok",
+                        "expires": expires_dt.strftime("%Y-%m-%d"),
+                        "days_left": days_left,
+                        "issuer": issuer.get("organizationName", "unknown"),
+                    }
+                )
+        except Exception as exc:  # DNS failure, refused connection, bad cert, timeout...
+            result.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
+        return result
 
 
 def classify(result, warn_days):
@@ -135,6 +136,11 @@ def main(argv=None):
     )
     parser.add_argument("--json", action="store_true", help="Output JSON instead of a table.")
     parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress the human-readable table (JSON output is still shown with --json).",
+    )
+    parser.add_argument(
         "--fail-on",
         choices=["warn", "expired"],
         default="warn",
@@ -156,14 +162,14 @@ def main(argv=None):
 
     if args.json:
         print(json.dumps(results, indent=2))
-    else:
+    elif not args.quiet:
         for r in results:
             if r["status"] == "error":
                 print(f"{r['level']:<8} {r['domain']:<35} could not check — {r['error']}")
             else:
                 print(
                     f"{r['level']:<8} {r['domain']:<35} expires {r['expires']} "
-                    f"({r['days_left']} days left, issuer: {r['issuer']})"
+                    f"{r['days_left']} days left, issuer: {r['issuer']}"
                 )
 
     levels = {r["level"] for r in results}
